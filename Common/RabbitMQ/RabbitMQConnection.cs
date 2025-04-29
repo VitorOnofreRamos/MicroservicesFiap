@@ -2,39 +2,54 @@
 
 namespace Common.RabbitMQ;
 
-public class RabbitMQConnection : IDisposable
+/// <summary>
+/// Async-ready wrapper for RabbitMQ connections and channels.
+/// </summary>
+public class RabbitMQConnection : IAsyncDisposable
 {
     private IConnection _connection;
-    private IChannel _channel;
     private bool _disposed;
 
-    public RabbitMQConnection()
+    private RabbitMQConnection(IConnection connection)
     {
-        var factory = new ConnectionFactory
+        _connection = connection;
+    }
+
+    /// <summary>
+    /// Factory method to create and open a connection asynchornously.
+    /// </summary>
+    public static async Task<RabbitMQConnection> CreateAsync()
+    {
+        var factory = new ConnectionFactory()
         {
             HostName = RabbitMQConfig.HostName,
             UserName = RabbitMQConfig.UserName,
             Password = RabbitMQConfig.Password
         };
 
-        _connection = await factory.CreateConnectionAsync();
-        _channel = await _connection.CreateChannelAsync();
+        // Open connection asynchronously
+        IConnection connection = await factory.CreateConnectionAsync().ConfigureAwait(false);
+        new RabbitMQConnection(connection);
     }
 
-    public void Dispose() 
+    /// <summary>
+    /// Create a channel asynchronously.
+    /// </summary>
+    public async Task<IChannel> CreateChannelAsync()
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        return await _connection.CreateChannelAsync().ConfigureAwait(false);
     }
 
-    protected virtual void Dispose(bool disposing)
+    /// <summary>
+    /// Releases RabbitMQ resources.
+    /// </summary>
+    public async ValueTask DisposeAsync()
     {
         if (_disposed)
             return;
 
-        if (disposing)
-            _connection?.Dispose();
-
+        await _connection.DisposeAsync().ConfigureAwait(false);
         _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }
