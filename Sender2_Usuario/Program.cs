@@ -7,29 +7,29 @@ namespace Sender2_Usuario;
 
 class Program
 {
-    static void Main(string[] args)
+    static async void Main(string[] args)
     {
         Console.WriteLine("=== Sender 2 -Dados de Usuário ===");
 
-        using var rabbitConnection = new RabbitMQConnection();
-        using var channel = rabbitConnection.CreateChannel();
+        var rabbitConnection = await RabbitMQConnection.CreateAsync();
+        var channel = await rabbitConnection.CreateChannelAsync();
 
         // Declare Exchange
-        channel.ExchangeDeclare(
+        await channel.ExchangeDeclareAsync(
             exchange: RabbitMQConfig.UsuariosExchange,
             type: ExchangeType.Direct,
             durable: true,
             autoDelete: false);
 
         // Declare Queue
-        channel.QueueDeclare(
+        await channel.QueueDeclareAsync(
             queue: RabbitMQConfig.UsuariosToValidationQueue,
             durable: true,
             exclusive: false,
             autoDelete: false);
 
         // Bind Queue to Exchage
-        channel.QueueBind(
+        await channel.QueueBindAsync(
             queue: RabbitMQConfig.UsuariosToValidationQueue,
             exchange: RabbitMQConfig.UsuariosExchange,
             routingKey: RabbitMQConfig.UsuariosToValidationKey);
@@ -74,13 +74,15 @@ class Program
             var messageBytes = Message<Usuario>.Serialize(message);
 
             // Publish message
-            channel.BasicPublich(
+            await channel.BasicPublishAsync(
                 exchange: RabbitMQConfig.UsuariosExchange,
                 routingKey: RabbitMQConfig.UsuariosToValidationKey,
-                BasicProperties: null,
-                MethodBody: messageBytes);
+                basicProperties: null,
+                body: messageBytes);
 
             Console.WriteLine($"[x] Enviando usuário {usuario.NomeCompleto} para validação em {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         }
+
+        await rabbitConnection.DisposeAsync();
     }
 }

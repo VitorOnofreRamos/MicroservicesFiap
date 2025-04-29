@@ -2,150 +2,177 @@
 using Common.RabbitMQ;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using System.Reflection;
 using Validation.Validators;
 
 namespace Validation;
 
 class Program
 {
-    static void Main(string[] args)
-    {
-        Console.WriteLine("=== Validation Service ===");
+	static async Task Main(string[] args)
+	{
+		Console.WriteLine("=== Validation Service ===");
 
-        using var rabbitConnection = new RabbitMQConnection();
-        using var channel = rabbitConnection.CreateChannel();
+		// Use the async factory method and await it
+		var rabbitConnection = await RabbitMQConnection.CreateAsync();
+		// Create channel asynchronously
+		var channel = await rabbitConnection.CreateChannelAsync();
 
-        SetupFrutasValidation(channel);
-        SetupUsuáriosValidation(channel);
+		await SetupFrutasValidationAsync(channel);
+		await SetupUsuariosValidationAsync(channel);
 
-        Console.WriteLine(" [*] Esperando por mensagens para validar...");
-        Console.WriteLine(" [*] Pressione [enter] para sair.");
-        Console.ReadLine();
-    }
+		Console.WriteLine(" [*] Esperando por mensagens para validar...");
+		Console.WriteLine(" [*] Pressione [enter] para sair.");
+		Console.ReadLine();
 
-    private static void SetupFrutasValidation(IModel channel)
-    {
-        // Configuração para frutas
-        channel.ExchangeDeclare(
-            exchange: RabbitMQConfig.FrutasExchange,
-            type: ExchangeType.Direct,
-            durable: true,
-            autoDelete: false);
+		// Dispose of resources asynchronously
+		await rabbitConnection.DisposeAsync();
+	}
 
-        channel.ExchangeDeclare(
-            exchange: RabbitMQConfig.ValidationExchange,
-            type: ExchangeType.Direct,
-            durable: true,
-            autoDelete: false);
+	private static async Task SetupFrutasValidationAsync(IChannel channel)
+	{
+		// Configuração para frutas
+		await channel.ExchangeDeclareAsync(
+			exchange: RabbitMQConfig.FrutasExchange,
+			type: ExchangeType.Direct,
+			durable: true,
+			autoDelete: false);
 
-        channel.QueueDeclare(
-            queue: RabbitMQConfig.FrutasToValidationQueue,
-            durable: true,
-            exclusive: false,
-            autoDelete: false);
+		await channel.ExchangeDeclareAsync(
+			exchange: RabbitMQConfig.ValidationExchange,
+			type: ExchangeType.Direct,
+			durable: true,
+			autoDelete: false);
 
-        channel.QueueDeclare(
-            queue: RabbitMQConfig.ValidatedFrutasQueue,
-            durable: true,
-            exclusive: false,
-            autoDelete: false);
+		await channel.QueueDeclareAsync(
+			queue: RabbitMQConfig.FrutasToValidationQueue,
+			durable: true,
+			exclusive: false,
+			autoDelete: false);
 
-        channel.QueueBind(
-            queue: RabbitMQConfig.FrutasToValidationQueue,
-            exchange: RabbitMQConfig.FrutasExchange,
-            routingKey: RabbitMQConfig.FrutasToValidationKey);
+		await channel.QueueDeclareAsync(
+			queue: RabbitMQConfig.ValidatedFrutasQueue,
+			durable: true,
+			exclusive: false,
+			autoDelete: false);
 
-        channel.QueueBind(
-            queue: RabbitMQConfig.ValidatedFrutasQueue,
-            exchange: RabbitMQConfig.ValidationExchange,
-            routingKey: RabbitMQConfig.ValidatedFrutasKey);
+		await channel.QueueBindAsync(
+			queue: RabbitMQConfig.FrutasToValidationQueue,
+			exchange: RabbitMQConfig.FrutasExchange,
+			routingKey: RabbitMQConfig.FrutasToValidationKey);
 
-        // Consumer
-        var consumer = new EventingBasicConsumer(channel);
-        consumer.Received += (model, ea) =>
-        {
-            var message = Message<Fruta>.Deserialize(ea.Body.ToArray());
-            var fruta = message.Data;
+		await channel.QueueBindAsync(
+			queue: RabbitMQConfig.ValidatedFrutasQueue,
+			exchange: RabbitMQConfig.ValidationExchange,
+			routingKey: RabbitMQConfig.ValidatedFrutasKey);
 
-            Console.WriteLine($"\n[x] Recebido: {fruta.Nome} para validação");
+		// Consumer
+		var consumer = new AsyncDefaultBasicConsumer(channel);
+		consumer.ConsumedAsync += async (model, ea) =>
+		{
+			var message = Message<Fruta>.Deserialize(ea.Body.ToArray());
+			var fruta = message.Data;
 
-            var validator = new FrutaValidator();
-            bool isValid = validator.Validate(fruta, out string validationMessage);
+			Console.WriteLine($"\n[x] Recebido: {fruta.Nome} para validação");
 
-            message.IsValid = isValid;
-            message.ValidationMessage = validationMessage;
+			var validator = new FrutaValidator();
+			bool isValid = validator.Validate(fruta, out string validationMessage);
 
-            // Enviar resposta valida
-            var responseBytes = Message<Fruta>.Serialize(message);
+			message.IsValid = isValid;
+			message.ValidationMessage = validationMessage;
 
-            channel.BasicPublish(
-                exchange: RabbitMQConfig.ValidationExchange,
-                routingKey: RabbitMQConfig.ValidatedFrutasKey,
-                BasicProperties: null,
-                MethodBody: responseBytes);
+			// Enviar resposta validada
+			var responseBytes = Message<Fruta>.Serialize(message);
 
-            Console.WriteLine($"[X] Enviando resultado de validação para fruta {fruta.Nome}: {(isValid ? "Válida" : "Inválida")}");
-            if (!isValid)
-                Console.WriteLine($"     Motivo: {validationMessage}");
+			await channel.BasicPublishAsync(
+				exchange: RabbitMQConfig.ValidationExchange,
+				routingKey: RabbitMQConfig.ValidatedFrutasKey,
+				basicProperties: null,
+				body: responseBytes);
 
-            channel.BasicAck(ea.DeliveryTag, false);
-        };
+			Console.WriteLine($"[X] Enviando resultado de validação para fruta {fruta.Nome}: {(isValid ? "Válida" : "Inválida")}");
+			if (!isValid)
+				Console.WriteLine($"     Motivo: {validationMessage}");
 
-        channel.BasicConsume(
-            queue: RabbitMQConfig.FrutasToValidationQueue,
-            autoAck: false,
-            consumer: consumer);
-    }
+			await channel.BasicAckAsync(ea.DeliveryTag, false);
+		};
 
-    private static void SetupUsuariosValidtion(IModel channel)
-    {
-        // Configuração para usuários
-        channel.ExchangeDeclare(
-            exchange: RabbitMQConfig.UsuariosExchange,
-            type: ExchangeType.Direct,
-            durable: true,
-            autoDelete: false);
+		var consumerTag = await channel.BasicConsumeAsync(
+			queue: RabbitMQConfig.FrutasToValidationQueue,
+			autoAck: false,
+			consumer: consumer);
+	}
 
-        channel.ExchangeDeclare(
-            exchange: RabbitMQConfig.UsuariosToValidationQueue,
-            type: true,
-            durable: false,
-            autoDelete: false);
+	private static async Task SetupUsuariosValidationAsync(IChannel channel)
+	{
+		// Configuração para usuários
+		await channel.ExchangeDeclareAsync(
+			exchange: RabbitMQConfig.UsuariosExchange,
+			type: ExchangeType.Direct,
+			durable: true,
+			autoDelete: false);
 
-        channel.QueueDeclare(
-            queue: RabbitMQConfig.ValidatedUsuariosQueue,
-            durable: true,
-            exclusive: false,
-            autoDelete: false);
+		await channel.ExchangeDeclareAsync(
+			exchange: RabbitMQConfig.ValidationExchange,
+			type: ExchangeType.Direct,
+			durable: true,
+			autoDelete: false);
 
-        channel.QueueBind(
-            queue: RabbitMQConfig.UsuariosToValidationQueue,
-            exchange: RabbitMQConfig.UsuariosExchange,
-            routingKey: RabbitMQConfig.UsuariosToValidationKey);
+		await channel.QueueDeclareAsync(
+			queue: RabbitMQConfig.UsuariosToValidationQueue,
+			durable: true,
+			exclusive: false,
+			autoDelete: false);
 
-        channel.QueueBind(
-            queue: RabbitMQConfig.ValidatedUsuariosQueue,
-            exchange: RabbitMQConfig.ValidationExchange,
-            routingKey: RabbitMQConfig.ValidatedUsuariosKey);
+		await channel.QueueDeclareAsync(
+			queue: RabbitMQConfig.ValidatedUsuariosQueue,
+			durable: true,
+			exclusive: false,
+			autoDelete: false);
 
-        // Consumer
-        var consumer = new EventingBasicConsumer(channel);
-        consumer.Received += (model, ea) =>
-        {
-            var message = Message<Usuario>.Deserialize(ea.Body.ToArray());
-            var usuario = message.Data;
+		await channel.QueueBindAsync(
+			queue: RabbitMQConfig.UsuariosToValidationQueue,
+			exchange: RabbitMQConfig.UsuariosExchange,
+			routingKey: RabbitMQConfig.UsuariosToValidationKey);
 
-            Console.WriteLine($"[x] Enviando resultado de validação para usuário {usuario.NomeCompleto}: {(isValid ? "Válido" : "Inválido")}");
-            if (!isValid)
-                Console.WriteLine($"    Motivo: {validationMessage}");
+		await channel.QueueBindAsync(
+			queue: RabbitMQConfig.ValidatedUsuariosQueue,
+			exchange: RabbitMQConfig.ValidationExchange,
+			routingKey: RabbitMQConfig.ValidatedUsuariosKey);
 
-            channel.BasicAck(ea.DeliveryTag, false);
-        };
+		// Consumer
+		var consumer = new AsyncDefaultBasicConsumer(channel);
+		consumer.ConsumedAsync += async (model, ea) =>
+		{
+			var message = Message<Usuario>.Deserialize(ea.Body.ToArray());
+			var usuario = message.Data;
 
-        channel.BasicConsume(
-            queue: RabbitMQConfig.UsuariosToValidationQueue,
-            autoAck: false,
-            consumer: consumer);
-    }
+			Console.WriteLine($"\n[x] Recebido: {usuario.NomeCompleto} para validação");
+
+			var validator = new UsuariosValidator();
+			bool isValid = validator.Validate(usuario, out string validationMessage);
+
+			message.IsValid = isValid;
+			message.ValidationMessage = validationMessage;
+
+			// Enviar resposta validada
+			var responseBytes = Message<Usuario>.Serialize(message);
+
+			await channel.BasicPublishAsync(
+				exchange: RabbitMQConfig.ValidationExchange,
+				routingKey: RabbitMQConfig.ValidatedUsuariosKey,
+				basicProperties: null,
+				body: responseBytes);
+
+			Console.WriteLine($"[x] Enviando resultado de validação para usuário {usuario.NomeCompleto}: {(isValid ? "Válido" : "Inválido")}");
+			if (!isValid)
+				Console.WriteLine($"    Motivo: {validationMessage}");
+
+			await channel.BasicAckAsync(ea.DeliveryTag, false);
+		};
+
+		var consumerTag = await channel.BasicConsumeAsync(
+			queue: RabbitMQConfig.UsuariosToValidationQueue,
+			autoAck: false,
+			consumer: consumer);
+	}
 }

@@ -29,7 +29,7 @@ public class RabbitMQConnection : IAsyncDisposable
 
         // Open connection asynchronously
         IConnection connection = await factory.CreateConnectionAsync().ConfigureAwait(false);
-        new RabbitMQConnection(connection);
+        return new RabbitMQConnection(connection);
     }
 
     /// <summary>

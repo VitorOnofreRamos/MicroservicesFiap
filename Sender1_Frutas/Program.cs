@@ -1,5 +1,6 @@
 ﻿using Common.Models;
 using Common.RabbitMQ;
+using Microsoft.VisualBasic;
 using RabbitMQ.Client;
 using System.Reflection;
 using System.Security.Authentication;
@@ -8,29 +9,29 @@ namespace Sender1_Frutas;
 
 class Program
 {
-    static void Main(string[] args)
+    static async void Main(string[] args)
     {
         Console.WriteLine("=== Sender 1 - Frutas de Época ===");
 
-        using var rabbitConnection = new RabbitMQConnection();
-        using var channel = rabbitConnection.CreateChannel();
+        var rabbitConnection = await RabbitMQConnection.CreateAsync();
+        var channel = await rabbitConnection.CreateChannelAsync();
 
         // Declare Exchange
-        channel.ExchangeDeclare(
+        await channel.ExchangeDeclareAsync(
             exchange: RabbitMQConfig.FrutasExchange,
             type: ExchangeType.Direct,
             durable: true,
             autoDelete: false);
 
         // Declare Queue
-        channel.QueueDeclare(
+        await channel.QueueDeclareAsync(
             queue: RabbitMQConfig.FrutasToValidationQueue,
             durable: true,
             exclusive: false,
             autoDelete: false);
 
         // Bind Queue to Exchage
-        channel.QueueBind(
+        await channel.QueueBindAsync(
             queue: RabbitMQConfig.FrutasToValidationQueue,
             exchange: RabbitMQConfig.FrutasExchange,
             routingKey: RabbitMQConfig.FrutasToValidationKey);
@@ -67,13 +68,15 @@ class Program
             var messageBytes = Message<Fruta>.Serialize(message);
 
             //Publish message
-            channel.BasicPublish(
+            await channel.BasicPublishAsync(
                 exchange: RabbitMQConfig.FrutasExchange,
                 routingKey: RabbitMQConfig.FrutasToValidationKey,
-                BasicProperties: null,
-                MethodBody: messageBytes);
+                basicProperties: null,
+                body: messageBytes);
 
             Console.WriteLine($"[X] Enviado {fruta.Nome} para validação em {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        };
+        }
+
+        await rabbitConnection.DisposeAsync();
     }
 }
