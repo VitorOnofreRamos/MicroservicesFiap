@@ -2,22 +2,21 @@
 using Common.RabbitMQ;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using RabbitMQ.Client;
 
-namespace Receiver2_Usuario;
+namespace Receiver1_Frutas;
 
 class Program
 {
 	static async Task Main(string[] args)
 	{
-		Console.WriteLine("=== Receiver 2 - Dados de Usuário ===");
+		Console.WriteLine("=== Receiver 1 - Frutas de Época ===");
 
 		// Use the async factory method and await it
 		var rabbitConnection = await RabbitMQConnection.CreateAsync();
 		// Create channel asynchronously
 		var channel = await rabbitConnection.CreateChannelAsync();
 
-		// Declare Exchange (fixed the typo in parameter name)
+		// Declare Exchange
 		await channel.ExchangeDeclareAsync(
 			exchange: RabbitMQConfig.ValidationExchange,
 			type: ExchangeType.Direct,
@@ -26,29 +25,31 @@ class Program
 
 		// Declare Queue
 		await channel.QueueDeclareAsync(
-			queue: RabbitMQConfig.ValidatedUsuariosQueue,
+			queue: RabbitMQConfig.ValidatedFrutasQueue,
 			durable: true,
 			exclusive: false,
 			autoDelete: false);
 
 		// Bind Queue to Exchange
 		await channel.QueueBindAsync(
-			queue: RabbitMQConfig.ValidatedUsuariosQueue,
+			queue: RabbitMQConfig.ValidatedFrutasQueue,
 			exchange: RabbitMQConfig.ValidationExchange,
-			routingKey: RabbitMQConfig.ValidatedUsuariosKey);
+			routingKey: RabbitMQConfig.ValidatedFrutasKey);
 
-		Console.WriteLine(" [*] Esperando por mensagem de usuários validados...");
+		Console.WriteLine(" [*] Esperando por mensagem de frutas validadas...");
 
-		// Usando o consumidor básico para processamento assíncrono
-		var consumer = new AsyncDefaultBasicConsumer(channel);
-		consumer.ConsumedAsync += async (model, ea) =>
+		// Use AsyncEventingBasicConsumer instead of AsyncDefaultBasicConsumer
+		var consumer = new AsyncEventingBasicConsumer(channel);
+
+		// Use Received event instead of ConsumedAsync
+		consumer.ReceivedAsync += async (sender, ea) =>
 		{
-			var message = Message<Usuario>.Deserialize(ea.Body.ToArray());
-			var usuario = message.Data;
+			var message = Message<Fruta>.Deserialize(ea.Body.ToArray());
+			var fruta = message.Data;
 
 			Console.WriteLine("\n=====================================");
-			Console.WriteLine($"Recebido usuário validado: {usuario.NomeCompleto}");
-			Console.WriteLine($"Status de validação: {(message.IsValid ? "Válido" : "Inválido")}");
+			Console.WriteLine($"Recebido fruta validada: {fruta.Nome}");
+			Console.WriteLine($"Status de validação: {(message.IsValid ? "Válida" : "Inválida")}");
 
 			if (!message.IsValid)
 			{
@@ -56,8 +57,8 @@ class Program
 			}
 			else
 			{
-				Console.WriteLine($"Detalhes do usuário:");
-				Console.WriteLine(usuario.ToString());
+				Console.WriteLine($"Detalhes da fruta:");
+				Console.WriteLine(fruta.ToString());
 			}
 			Console.WriteLine("=====================================");
 
@@ -67,7 +68,7 @@ class Program
 
 		// Start consuming asynchronously
 		var consumerTag = await channel.BasicConsumeAsync(
-			queue: RabbitMQConfig.ValidatedUsuariosQueue,
+			queue: RabbitMQConfig.ValidatedFrutasQueue,
 			autoAck: false,
 			consumer: consumer);
 

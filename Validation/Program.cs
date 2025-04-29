@@ -65,9 +65,11 @@ class Program
 			exchange: RabbitMQConfig.ValidationExchange,
 			routingKey: RabbitMQConfig.ValidatedFrutasKey);
 
-		// Consumer
-		var consumer = new AsyncDefaultBasicConsumer(channel);
-		consumer.ConsumedAsync += async (model, ea) =>
+		// Use AsyncEventingBasicConsumer instead of AsyncDefaultBasicConsumer
+		var consumer = new AsyncEventingBasicConsumer(channel);
+
+		// Use Received event instead of ConsumedAsync
+		consumer.ReceivedAsync += async (sender, ea) =>
 		{
 			var message = Message<Fruta>.Deserialize(ea.Body.ToArray());
 			var fruta = message.Data;
@@ -86,7 +88,6 @@ class Program
 			await channel.BasicPublishAsync(
 				exchange: RabbitMQConfig.ValidationExchange,
 				routingKey: RabbitMQConfig.ValidatedFrutasKey,
-				basicProperties: null,
 				body: responseBytes);
 
 			Console.WriteLine($"[X] Enviando resultado de validação para fruta {fruta.Nome}: {(isValid ? "Válida" : "Inválida")}");
@@ -139,9 +140,11 @@ class Program
 			exchange: RabbitMQConfig.ValidationExchange,
 			routingKey: RabbitMQConfig.ValidatedUsuariosKey);
 
-		// Consumer
-		var consumer = new AsyncDefaultBasicConsumer(channel);
-		consumer.ConsumedAsync += async (model, ea) =>
+		// Use AsyncEventingBasicConsumer instead of AsyncDefaultBasicConsumer
+		var consumer = new AsyncEventingBasicConsumer(channel);
+
+		// Use Received event instead of ConsumedAsync
+		consumer.ReceivedAsync += async (sender, ea) =>
 		{
 			var message = Message<Usuario>.Deserialize(ea.Body.ToArray());
 			var usuario = message.Data;
@@ -160,7 +163,6 @@ class Program
 			await channel.BasicPublishAsync(
 				exchange: RabbitMQConfig.ValidationExchange,
 				routingKey: RabbitMQConfig.ValidatedUsuariosKey,
-				basicProperties: null,
 				body: responseBytes);
 
 			Console.WriteLine($"[x] Enviando resultado de validação para usuário {usuario.NomeCompleto}: {(isValid ? "Válido" : "Inválido")}");

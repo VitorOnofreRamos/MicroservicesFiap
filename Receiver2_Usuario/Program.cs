@@ -16,7 +16,7 @@ class Program
 		// Create channel asynchronously
 		var channel = await rabbitConnection.CreateChannelAsync();
 
-		// Declare Exchange (fixed the typo in parameter name)
+		// Declare Exchange
 		await channel.ExchangeDeclareAsync(
 			exchange: RabbitMQConfig.ValidationExchange,
 			type: ExchangeType.Direct,
@@ -38,9 +38,11 @@ class Program
 
 		Console.WriteLine(" [*] Esperando por mensagem de usuários validados...");
 
-		// Usando o consumidor básico para processamento assíncrono
-		var consumer = new AsyncDefaultBasicConsumer(channel);
-		consumer.ConsumedAsync += async (model, ea) =>
+		// Use AsyncEventingBasicConsumer instead of AsyncDefaultBasicConsumer
+		var consumer = new AsyncEventingBasicConsumer(channel);
+
+		// Use Received event instead of ConsumedAsync
+		consumer.ReceivedAsync += async (sender, ea) =>
 		{
 			var message = Message<Usuario>.Deserialize(ea.Body.ToArray());
 			var usuario = message.Data;
