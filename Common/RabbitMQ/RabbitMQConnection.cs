@@ -5,22 +5,20 @@ namespace Common.RabbitMQ;
 public class RabbitMQConnection : IDisposable
 {
     private IConnection _connection;
+    private IChannel _channel;
     private bool _disposed;
 
     public RabbitMQConnection()
     {
-        var factory = new ConnectionFactory()
+        var factory = new ConnectionFactory
         {
             HostName = RabbitMQConfig.HostName,
             UserName = RabbitMQConfig.UserName,
             Password = RabbitMQConfig.Password
         };
 
-        _connection = factory.CreateConnection();
-    }
-    public IModel CreateChannel()
-    {
-        return _connection.CreateModel();
+        _connection = await factory.CreateConnectionAsync();
+        _channel = await _connection.CreateChannelAsync();
     }
 
     public void Dispose() 
