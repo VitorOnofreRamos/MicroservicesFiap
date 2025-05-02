@@ -185,4 +185,6 @@ O projeto utiliza a API assíncrona do RabbitMQ.Client para todas as operações
 ---
 
 ## Equipe
-[Nome dos membros da equipe e RMs]
+Nome: Beatriz Silva RM552600
+Vitor Onofre Ramos RM553241
+Pedro Henrique soares araujo - RM553801
